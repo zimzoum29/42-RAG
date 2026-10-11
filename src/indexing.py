@@ -1,5 +1,6 @@
 import os
 import re
+import ast
 from typing import Literal
 from pathlib import Path
 from tqdm import tqdm
@@ -57,36 +58,76 @@ def read_file(path: str) -> str:
         return None
 
 
-def split_by_size(content: str, start: int, end: int, max_size: int) -> list[tuple[int, int]]:
-
-    spans: list[tuple[int, int]] = []
-    pos = start
-
-    while end - pos > max_size:
-
-        window_end = pos + max_size
-        newline = content.rfind("\n", pos, window_end)
-        cut = newline + 1 if newline > pos else window_end
-        spans.append((pos, cut))
-        pos = cut
-
-    if pos < end:
-        spans.append((pos, end))
-
-    return spans
-
-
-def make_chunks(path: str, content: str, kind: FileKind, spans: list[tuple[int, int]]) -> list[Chunk]:
-    return [
-        Chunk(file_path=path, first_character_index=s, last_character_index=e, kind=kind, text=content[s:e])
-        for s, e in spans
-        if content[s:e].strip()
-    ]
-
-
 def chunk_python(path: str, content: str, max_size: int) -> list[Chunk]:
 
-    return make_chunks(path, content, "code", split_by_size(content, 0, len(content), max_size))
+    line_starts = [0]
+
+    for i, char in enumerate(content):
+        if char == "\n":
+            line_starts.append(i + 1)
+
+    line_starts.append(len(content))
+    cuts = {0, len(content)}
+
+    try:
+        tree: ast.Module | None = ast.parse(content)
+
+    except (SyntaxError, ValueError):
+        tree = None
+
+    if tree is not None:
+        for node in tree.body:
+
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            
+            first_line = min([node.lineno] + [d.lineno for d in node.decorator_list])
+            start = line_starts[first_line - 1]
+            end = line_starts[node.end_lineno or node.lineno]
+            cuts.update((start, end))
+
+            if isinstance(node, ast.ClassDef) and end - start > max_size:
+
+                for child in node.body:
+
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+
+                        child_line = min([child.lineno] + [d.lineno for d in child.decorator_list])
+                        cuts.add(line_starts[child_line - 1])
+                        cuts.add(line_starts[child.end_lineno or child.lineno])
+
+    bounds = sorted(cuts)
+    chunks: list[Chunk] = []
+
+    for start, end in zip(bounds, bounds[1:]):
+
+        pos = start
+
+        while pos < end:
+
+            cut = end
+
+            if end - pos > max_size:
+
+                window_end = pos + max_size
+                cut = window_end
+
+                for sep in ("\n\n", "\n"):
+                    idx = content.rfind(sep, pos, window_end)
+
+                    if idx > pos:
+                        cut = idx + len(sep)
+                        break
+                    
+            text = content[pos:cut]
+
+            if text.strip():
+
+                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="code", text=text))
+
+            pos = cut
+            
+    return chunks
 
 
 def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
@@ -95,42 +136,52 @@ def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
     in_fence = False
     fence = ""
     pos = 0
+
     for line in content.splitlines(keepends=True):
+
         match = re.compile(r"[ ]{0,3}(`{3,}|~{3,})").match(line)
+        
         if match:
             marker = match.group(1)
+
             if not in_fence:
                 in_fence, fence = True, marker
+
             elif marker[0] == fence[0] and len(marker) >= len(fence):
                 in_fence = False
+
         elif not in_fence and re.compile(r"#{1,6}(?:[ \t]|$)").match(line) and pos != 0:
             starts.append(pos)
-        pos += len(line)
-    ends = starts[1:] + [len(content)]
 
+        pos += len(line)
+
+    ends = starts[1:] + [len(content)]
     chunks: list[Chunk] = []
+
     for start, end in zip(starts, ends):
+
         pos = start
         while pos < end:
             cut = end
+
             if end - pos > max_size:
                 window_end = pos + max_size
                 cut = window_end
+
                 for sep in ("\n\n", "\n"):
+
                     idx = content.rfind(sep, pos, window_end)
                     if idx > pos:
                         cut = idx + len(sep)
                         break
+                    
             text = content[pos:cut]
+
             if text.strip():
-                chunks.append(Chunk(
-                    file_path=path,
-                    first_character_index=pos,
-                    last_character_index=cut,
-                    kind="doc",
-                    text=text,
-                ))
+                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="doc", text=text))
+            
             pos = cut
+
     return chunks
 
 
