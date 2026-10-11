@@ -1,6 +1,9 @@
-from .indexing import collect_files
+from .indexing import chunk_corpus
 
 def main(): 
-    collect_files("data/raw/vllm-0.10.1")
+    l = chunk_corpus("data/raw/vllm-0.10.1")
+    for chunk in l:
+        print(chunk.text)
+        print("//////")
 
 main()
