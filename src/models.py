@@ -1,6 +1,7 @@
 import uuid
 from typing import List
 
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -42,3 +43,14 @@ class StudentSearchResults(BaseModel):
 class StudentSearchResultsAndAnswer(BaseModel):
     search_results: List[MinimalAnswer]
     k: int
+
+
+FileKind = Literal["code", "doc"]
+
+
+class Chunk(BaseModel):
+        file_path: str
+        first_character_index: int
+        last_character_index: int
+        kind: FileKind
+        text: str

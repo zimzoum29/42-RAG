@@ -1,4 +1,4 @@
-from .indexing import chunk_corpus
+from .chunking import chunk_corpus
 
 def main(): 
     l = chunk_corpus("data/raw/vllm-0.10.1")
