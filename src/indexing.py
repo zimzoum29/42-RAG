@@ -31,8 +31,7 @@ def tokenize(text: str) -> list[str]:
     return tokens
 
 
-def build_bm25(tokenized: list[list[str]],
-               k1: float = 1.5, b: float = 0.75) -> dict:
+def build_bm25(tokenized: list[list[str]], k1: float = 1.2, b: float = 0.5) -> dict:
     postings: dict[str, list[list[int]]] = {}
     doc_lengths: list[int] = []
     for chunk_id, tokens in enumerate(tokenized):
