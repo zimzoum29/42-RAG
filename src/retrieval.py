@@ -34,24 +34,22 @@ class Retriever:
             for chunk_id, tf in self.postings[token]:
                 length_ratio = self.doc_lengths[chunk_id] / self.avgdl
                 norm = self.k1 * (1 - self.b + self.b * length_ratio)
-                scores[chunk_id] = (scores.get(chunk_id, 0.0) + idf * tf * (self.k1 + 1) / (tf + norm))
+                scores[chunk_id] = (scores.get(chunk_id, 0.0)
+                                    + idf * tf * (self.k1 + 1) / (tf + norm))
         best = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:k]
         result = []
         for cid in best:
-            result.append(MinimalSource(self.chunks[cid].file_path, self.chunks[cid].first_character_index, self.chunks[cid].last_character_index))
-
+            result.append(MinimalSource(file_path=self.chunks[cid].file_path, first_character_index=self.chunks[cid].first_character_index, last_character_index=self.chunks[cid].last_character_index))
         return result
 
 def search_dataset(retriever: Retriever, dataset_path: str, k: int, save_directory: str) -> Path:
 
     with open(dataset_path, encoding="utf-8") as f:
         dataset = RagDataset.model_validate_json(f.read())
-
     results = []
     for question in tqdm(dataset.rag_questions, desc="Searching"):
-        results.append(MinimalSearchResults(question.question_id, question.question, retriever.search(question.question, k)))
+        results.append(MinimalSearchResults(question_id=question.question_id, question=question.question, retrieved_sources=retriever.search(question.question, k)))
         
-    
     output = StudentSearchResults(search_results=results, k=k)
 
     out_dir = Path(save_directory)

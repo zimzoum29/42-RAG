@@ -18,8 +18,8 @@ STOPWORDS = frozenset("""
 def tokenize(text: str) -> list[str]:
 
     tokens: list[str] = []
-    parts = []
     for word in WORD_RE.findall(text):
+        parts = []
         for piece in word.split("_"):
             for part in CAMEL_RE.split(piece):
                 if part:
@@ -48,7 +48,7 @@ def build_bm25(tokenized: list[list[str]], k1: float = 1.2, b: float = 0.5) -> d
     avgdl = sum(doc_lengths) / n_chunks if n_chunks else 0.0
     idf = {}
     for token, posting in postings.items():
-        idf.append(math.log(1 + (n_chunks - len(posting) + 0.5) / (len(posting) + 0.5)))
+        idf[token] = math.log(1 + (n_chunks - len(posting) + 0.5) / (len(posting) + 0.5))
 
     return {
         "k1": k1,

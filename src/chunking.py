@@ -109,7 +109,7 @@ def chunk_python(path: str, content: str, max_size: int) -> list[Chunk]:
             text = content[pos:cut]
 
             if text.strip():
-                chunks.append(Chunk(path, pos, cut, "code", text))
+                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="code", text=text))
 
             pos = cut
               
@@ -164,7 +164,7 @@ def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
             text = content[pos:cut]
 
             if text.strip():
-                chunks.append(Chunk(path, pos, cut, "doc", text))
+                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="doc", text=text))
             
             pos = cut
 
