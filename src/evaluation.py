@@ -17,8 +17,7 @@ def recall_at_k(results: StudentSearchResults, dataset: RagDataset, ks: list[int
     expected = {q.question_id: q.sources for q in dataset.rag_questions if isinstance(q, AnsweredQuestion) and q.sources}
     if not expected:
         raise ValueError("the dataset contains no answered question")
-    retrieved = {r.question_id: r.retrieved_sources
-                 for r in results.search_results}
+    retrieved = {r.question_id: r.retrieved_sources for r in results.search_results}
     recalls: dict[int, float] = {}
     for k in ks:
         total = 0.0

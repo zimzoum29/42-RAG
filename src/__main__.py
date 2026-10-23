@@ -1,9 +1,12 @@
+from pathlib import Path
+
 import fire
 
-from .indexing import build_index
-from .retrieval import Retriever, search_dataset
 from .evaluation import recall_at_k
+from .generation import Generator, answer_dataset
+from .indexing import build_index
 from .models import RagDataset, StudentSearchResults
+from .retrieval import Retriever, search_dataset
 
 
 def check_k(k: object) -> int:
@@ -22,18 +25,15 @@ class RagCLI:
         except (OSError, ValueError) as error:
             print(f"Error: {error}")
             return
-        print(f"Ingestion complete! Indexed {n_chunks} chunks "
-              f"under {out_dir}/")
+        print(f"Ingestion complete! Indexed {n_chunks} chunks under {out_dir}/")
 
-    def search(self, query: str, k: int = 5,
-               index_dir: str = "data/processed") -> None:
+    def search(self, query: str, k: int = 5, index_dir: str = "data/processed") -> None:
         try:
             k = check_k(k)
             query = str(query)
             if not query.strip():
                 raise ValueError("query must not be empty")
-            retriever = Retriever(index_dir)
-            sources = retriever.search(query, k)
+            sources = Retriever(index_dir).search(query, k)
         except FileNotFoundError:
             print(f"Error: no index found in {index_dir}/, run the index command first")
             return
@@ -53,8 +53,7 @@ class RagCLI:
             k = check_k(k)
             retriever = Retriever(index_dir)
         except FileNotFoundError:
-            print(f"Error: no index found in {index_dir}/, "
-                  "run the index command first")
+            print(f"Error: no index found in {index_dir}/, run the index command first")
             return
         except (OSError, ValueError) as error:
             print(f"Error: {error}")
@@ -69,6 +68,43 @@ class RagCLI:
             return
         print(f"Saved student_search_results to {out_path}")
 
+    def answer(self, query: str, k: int = 5, index_dir: str = "data/processed") -> None:
+        try:
+            k = check_k(k)
+            query = str(query)
+            if not query.strip():
+                raise ValueError("query must not be empty")
+            sources = Retriever(index_dir).search(query, k)
+        except FileNotFoundError:
+            print(f"Error: no index found in {index_dir}/, run the index command first")
+            return
+        except (OSError, ValueError) as error:
+            print(f"Error: {error}")
+            return
+        try:
+            answer = Generator().answer(query, sources)
+        except (ImportError, OSError, RuntimeError, ValueError) as error:
+            print(f"Error: answer generation failed: {error}")
+            return
+        print(answer)
+        print("\nSources:")
+        for rank, source in enumerate(sources, start=1):
+            print(f"{rank}. {source.file_path} "
+                  f"[{source.first_character_index}:"
+                  f"{source.last_character_index}]")
+
+    def answer_dataset(self, student_search_results_path: str, save_directory: str = "data/output/search_results_and_answer") -> None:
+        if not Path(str(student_search_results_path)).is_file():
+            print(f"Error: file not found: {student_search_results_path}")
+            return
+        try:
+            generator = Generator()
+            out_path = answer_dataset(generator, str(student_search_results_path), str(save_directory))
+        except (ImportError, OSError, RuntimeError, ValueError) as error:
+            print(f"Error: {error}")
+            return
+        print(f"Saved student_search_results_and_answer to {out_path}")
+
     def evaluate(self, student_search_results_path: str, dataset_path: str) -> None:
         try:
             with open(student_search_results_path, encoding="utf-8") as f:
@@ -79,8 +115,7 @@ class RagCLI:
         except (OSError, ValueError) as error:
             print(f"Error: {error}")
             return
-        print("  ".join(f"Recall@{k}: {value:.3f}"
-                        for k, value in recalls.items()))
+        print("  ".join(f"Recall@{k}: {value:.3f}" for k, value in recalls.items()))
 
 
 if __name__ == "__main__":
