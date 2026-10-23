@@ -2,6 +2,8 @@ import fire
 
 from .indexing import build_index
 from .retrieval import Retriever, search_dataset
+from .evaluation import recall_at_k
+from .models import RagDataset, StudentSearchResults
 
 
 def check_k(k: object) -> int:
@@ -66,6 +68,19 @@ class RagCLI:
             print(f"Error: invalid dataset {dataset_path}: {error}")
             return
         print(f"Saved student_search_results to {out_path}")
+
+    def evaluate(self, student_search_results_path: str, dataset_path: str) -> None:
+        try:
+            with open(student_search_results_path, encoding="utf-8") as f:
+                results = StudentSearchResults.model_validate_json(f.read())
+            with open(dataset_path, encoding="utf-8") as f:
+                dataset = RagDataset.model_validate_json(f.read())
+            recalls = recall_at_k(results, dataset, [1, 3, 5, 10])
+        except (OSError, ValueError) as error:
+            print(f"Error: {error}")
+            return
+        print("  ".join(f"Recall@{k}: {value:.3f}"
+                        for k, value in recalls.items()))
 
 
 if __name__ == "__main__":

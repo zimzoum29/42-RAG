@@ -4,4 +4,5 @@ __pycache__/
 data/raw/
 data/processed/
 data/output/
-*/.DS_Store
+.DS_Store
+moulinette/
