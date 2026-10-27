@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 from tqdm import tqdm
 
-from .models import (Chunk, MinimalSearchResults, MinimalSource, RagDataset, StudentSearchResults)
+from .models import (MinimalSearchResults, MinimalSource, RagDataset, StudentSearchResults)
 from .indexing import tokenize
 
 
@@ -12,7 +12,7 @@ class Retriever:
 
         directory = Path(index_dir)
         with open(directory / "chunks.json", encoding="utf-8") as f:
-            self.chunks = [Chunk.model_validate(c) for c in json.load(f)]
+            self.chunks = [MinimalSource.model_validate(c) for c in json.load(f)]
         with open(directory / "bm25_index.json", encoding="utf-8") as f:
             index: dict[str, Any] = json.load(f)
         self.k1: float = index["k1"]
@@ -37,10 +37,7 @@ class Retriever:
                 scores[chunk_id] = (scores.get(chunk_id, 0.0)
                                     + idf * tf * (self.k1 + 1) / (tf + norm))
         best = sorted(scores, key=lambda cid: scores[cid], reverse=True)[:k]
-        result = []
-        for cid in best:
-            result.append(MinimalSource(file_path=self.chunks[cid].file_path, first_character_index=self.chunks[cid].first_character_index, last_character_index=self.chunks[cid].last_character_index))
-        return result
+        return [self.chunks[cid] for cid in best]
 
 def search_dataset(retriever: Retriever, dataset_path: str, k: int, save_directory: str) -> Path:
 

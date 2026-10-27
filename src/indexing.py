@@ -3,8 +3,8 @@ import json
 import math
 from pathlib import Path
 
-from .chunking import chunk_corpus
-from .models import Chunk
+from .chunking import chunk_corpus, read_file
+from .models import MinimalSource
 
 WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 CAMEL_RE = re.compile(r"(?<=.)(?=[A-Z][a-z]{2,})")
@@ -59,7 +59,7 @@ def build_bm25(tokenized: list[list[str]], k1: float = 1.2, b: float = 0.5) -> d
         "postings": postings,
     }
 
-def save_index(out_dir: str, chunks: list[Chunk], index: dict) -> None:
+def save_index(out_dir: str, chunks: list[MinimalSource], index: dict) -> None:
 
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -72,10 +72,16 @@ def save_index(out_dir: str, chunks: list[Chunk], index: dict) -> None:
 
 
 def build_index(raw_dir: str = "data/raw", out_dir: str = "data/processed", max_chunk_size: int = 2000) -> int:
-    
     chunks = chunk_corpus(raw_dir, max_chunk_size)
-    tokenized = [tokenize(chunk.text) + tokenize(chunk.file_path)
-                 for chunk in chunks]
+    tokenized: list[list[str]] = []
+    path, content = "", ""
+    for chunk in chunks:
+        if chunk.file_path != path:
+            path = chunk.file_path
+            content = read_file(path) or ""
+        text = content[chunk.first_character_index:
+                        chunk.last_character_index]
+        tokenized.append(tokenize(text) + tokenize(chunk.file_path))
     index = build_bm25(tokenized)
     save_index(out_dir, chunks, index)
     return len(chunks)

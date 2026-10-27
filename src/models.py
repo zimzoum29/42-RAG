@@ -46,11 +46,3 @@ class StudentSearchResultsAndAnswer(BaseModel):
 
 
 FileKind = Literal["code", "doc"]
-
-
-class Chunk(BaseModel):
-        file_path: str
-        first_character_index: int
-        last_character_index: int
-        kind: FileKind
-        text: str

@@ -3,7 +3,7 @@ import re
 import ast
 from pathlib import Path
 from tqdm import tqdm
-from .models import Chunk, FileKind
+from .models import MinimalSource, FileKind
 
     
 def collect_files(raw_dir: str) -> list[tuple[str, FileKind]]:
@@ -48,7 +48,7 @@ def read_file(path: str) -> str:
         return None
 
 
-def chunk_python(path: str, content: str, max_size: int) -> list[Chunk]:
+def chunk_python(path: str, content: str, max_size: int) -> list[MinimalSource]:
 
     line_starts = [0]
 
@@ -86,7 +86,7 @@ def chunk_python(path: str, content: str, max_size: int) -> list[Chunk]:
                         cuts.add(line_starts[child.end_lineno or child.lineno])
 
     bounds = sorted(cuts)
-    chunks: list[Chunk] = []
+    chunks: list[MinimalSource] = []
 
     for start, end in zip(bounds, bounds[1:]):
 
@@ -109,14 +109,14 @@ def chunk_python(path: str, content: str, max_size: int) -> list[Chunk]:
             text = content[pos:cut]
 
             if text.strip():
-                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="code", text=text))
+                chunks.append(MinimalSource(file_path=path, first_character_index=pos, last_character_index=cut))
 
             pos = cut
               
     return chunks
 
 
-def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
+def chunk_markdown(path: str, content: str, max_size: int) -> list[MinimalSource]:
 
     starts = [0]
     in_fence = False
@@ -142,7 +142,7 @@ def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
         pos += len(line)
 
     ends = starts[1:] + [len(content)]
-    chunks: list[Chunk] = []
+    chunks: list[MinimalSource] = []
 
     for start, end in zip(starts, ends):
 
@@ -164,14 +164,14 @@ def chunk_markdown(path: str, content: str, max_size: int) -> list[Chunk]:
             text = content[pos:cut]
 
             if text.strip():
-                chunks.append(Chunk(file_path=path, first_character_index=pos, last_character_index=cut, kind="doc", text=text))
+                chunks.append(MinimalSource(file_path=path, first_character_index=pos, last_character_index=cut))
             
             pos = cut
 
     return chunks
 
 
-def chunk_corpus(raw_dir: str, max_chunk_size: int = 2000) -> list[Chunk]:
+def chunk_corpus(raw_dir: str, max_chunk_size: int = 2000) -> list[MinimalSource]:
 
     if not 1 <= max_chunk_size <= 2000:
         raise ValueError("max_chunk_size must be between 1 and 2000")
@@ -181,7 +181,7 @@ def chunk_corpus(raw_dir: str, max_chunk_size: int = 2000) -> list[Chunk]:
     if not files:
         raise ValueError(f"No indexable files found in {raw_dir}")
 
-    chunks: list[Chunk] = []
+    chunks: list[MinimalSource] = []
 
     for path, kind in tqdm(files, desc="Chunking"):
 
