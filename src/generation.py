@@ -36,7 +36,7 @@ class Generator:
             self.device = "cpu"
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype="auto").to(self.device)
+            model_name, dtype="auto").to(self.device)
         self.model.eval()
         self.max_context_tokens = max_context_tokens
         self.max_new_tokens = max_new_tokens
