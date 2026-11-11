@@ -27,19 +27,24 @@ class RagCLI:
             return
         print(f"Ingestion complete! Indexed {n_chunks} chunks under {out_dir}/")
 
-    def search(self, query: str, k: int = 5, index_dir: str = "data/processed") -> None:
+    def search(self, query: str, k: int = 5, index_dir: str = "data/processed", cache: bool = True) -> None:
         try:
             k = check_k(k)
             query = str(query)
             if not query.strip():
                 raise ValueError("query must not be empty")
-            sources = Retriever(index_dir).search(query, k)
+            retriever = Retriever(index_dir, use_cache=bool(cache))
+            sources = retriever.search(query, k)
+            retriever.save_cache()
         except FileNotFoundError:
-            print(f"Error: no index found in {index_dir}/, run the index command first")
+            print(f"Error: no index found in {index_dir}/, "
+                  "run the index command first")
             return
         except (OSError, ValueError) as error:
             print(f"Error: {error}")
             return
+        if retriever.cache_hits:
+            print("(results served from cache)")
         if not sources:
             print("No relevant source found.")
             return
@@ -48,10 +53,10 @@ class RagCLI:
                   f"[{source.first_character_index}:"
                   f"{source.last_character_index}]")
 
-    def search_dataset(self, dataset_path: str, k: int = 10, save_directory: str = "data/output/search_results", index_dir: str = "data/processed") -> None:
+    def search_dataset(self, dataset_path: str, k: int = 10, save_directory: str = "data/output/search_results", index_dir: str = "data/processed", cache: bool = True) -> None:
         try:
             k = check_k(k)
-            retriever = Retriever(index_dir)
+            retriever = Retriever(index_dir, use_cache=bool(cache))
         except FileNotFoundError:
             print(f"Error: no index found in {index_dir}/, run the index command first")
             return
