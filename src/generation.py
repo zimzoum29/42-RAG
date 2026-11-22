@@ -15,6 +15,17 @@ NO_CONTEXT_ANSWER = "I could not find relevant information to answer."
 
 
 def read_source(source: MinimalSource) -> str:
+    """Read the text covered by a source from its file.
+
+    Args:
+        source: Location of the passage.
+
+    Returns:
+        The text of the passage.
+
+    Raises:
+        OSError: If the file cannot be read.
+    """
 
     with open(source.file_path, encoding="utf-8", errors="replace", newline="") as f:
         content = f.read()
@@ -22,8 +33,32 @@ def read_source(source: MinimalSource) -> str:
 
 
 class Generator:
+    """Answer questions from retrieved sources with a local language model.
 
-    def __init__(self, model_name: str = MODEL_NAME, max_context_tokens: int = 3000, max_new_tokens: int = 256) -> None:
+    Attributes:
+        device: Device the model runs on ("cuda", "mps" or "cpu").
+        tokenizer: Tokenizer of the model.
+        model: The causal language model.
+        max_context_tokens: Token budget of the context given to the
+            model.
+        max_new_tokens: Maximum length of a generated answer, in tokens.
+    """
+
+    def __init__(self, model_name: str = MODEL_NAME,
+                 max_context_tokens: int = 3000,
+                 max_new_tokens: int = 256) -> None:
+        """Load the tokenizer and the model on the best device available.
+
+        Args:
+            model_name: Hugging Face name of the model.
+            max_context_tokens: Token budget of the context.
+            max_new_tokens: Maximum length of an answer, in tokens.
+
+        Raises:
+            ImportError: If torch or transformers is not installed.
+            OSError: If the model cannot be downloaded or loaded.
+        """
+
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -42,6 +77,19 @@ class Generator:
         self.max_new_tokens = max_new_tokens
 
     def build_context(self, sources: list[MinimalSource]) -> str:
+        """Join the text of the sources, best first, within the budget.
+
+        Sources are added in order until the next one would exceed
+        max_context_tokens; unreadable sources are skipped.
+
+        Args:
+            sources: Retrieved sources, best first.
+
+        Returns:
+            The numbered sources with their file path, or an empty
+            string if none could be added.
+        """
+
         blocks: list[str] = []
         used = 0
         for number, source in enumerate(sources, start=1):
@@ -58,6 +106,20 @@ class Generator:
         return "\n".join(blocks)
 
     def answer(self, question: str, sources: list[MinimalSource]) -> str:
+        """Generate an answer to a question from its sources.
+
+        The model is told to answer only from the context and to say
+        when the context does not contain the answer. Without any
+        usable source, a fixed message is returned instead.
+
+        Args:
+            question: Text of the question.
+            sources: Retrieved sources, best first.
+
+        Returns:
+            The generated answer.
+        """
+
         context = self.build_context(sources)
         if not context:
             return NO_CONTEXT_ANSWER
@@ -74,7 +136,26 @@ class Generator:
         return text.strip() or NO_CONTEXT_ANSWER
 
 
-def answer_dataset(generator: Generator, search_results_path: str, save_directory: str) -> Path:
+def answer_dataset(generator: Generator, search_results_path: str,
+                   save_directory: str) -> Path:
+    """Answer every question of a search results file and save them.
+
+    The output is a StudentSearchResultsAndAnswer JSON file with the
+    same name as the input file, written in save_directory.
+
+    Args:
+        generator: Loaded generator, reused for every question.
+        search_results_path: Path of a StudentSearchResults JSON file.
+        save_directory: Directory of the output, created if needed.
+
+    Returns:
+        Path of the written file.
+
+    Raises:
+        FileNotFoundError: If the search results file does not exist.
+        ValueError: If the file is not a valid StudentSearchResults.
+    """
+    
     with open(search_results_path, encoding="utf-8") as f:
         results = StudentSearchResults.model_validate_json(f.read())
     answers: list[MinimalAnswer] = []

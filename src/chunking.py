@@ -3,10 +3,28 @@ import re
 import ast
 from pathlib import Path
 from tqdm import tqdm
-from .models import MinimalSource, FileKind
+from .models import MinimalSource
+from typing import Literal
+
+FileKind = Literal["code", "doc"]
 
     
 def collect_files(raw_dir: str) -> list[tuple[str, FileKind]]:
+    """List the files to index under raw_dir, with their kind.
+
+    Python files are "code"; Markdown and text files are "doc". Hidden
+    directories and __pycache__ are skipped.
+
+    Args:
+        raw_dir: Root directory of the corpus (e.g. "data/raw").
+
+    Returns:
+        Sorted (path, kind) pairs. Paths are relative to the current
+        directory, so they match the corpus paths expected by the grader.
+
+    Raises:
+        FileNotFoundError: If raw_dir is not a directory.
+    """
 
     root = Path(raw_dir)
     files = []
@@ -38,7 +56,18 @@ def collect_files(raw_dir: str) -> list[tuple[str, FileKind]]:
     return files
 
 
-def read_file(path: str) -> str:
+def read_file(path: str) -> str | None:
+    """Read a whole file as text, without changing its characters.
+
+    Undecodable bytes are replaced by one character each, and line
+    endings are kept, so character offsets match the file.
+
+    Args:
+        path: Path of the file to read.
+
+    Returns:
+        The content of the file, or None if it cannot be read.
+    """
 
     try:
         with open(path, encoding="utf-8", errors="replace", newline="") as f:
@@ -48,7 +77,24 @@ def read_file(path: str) -> str:
         return None
 
 
-def chunk_python(path: str, content: str, max_size: int) -> list[MinimalSource]:
+def chunk_python(path: str, content: str,
+                 max_size: int) -> list[MinimalSource]:
+    """Split a Python file into chunks that follow its structure.
+
+    Each top-level function or class (with its decorators) becomes its
+    own region, and so does the code between them. A class longer than
+    max_size is also split between its methods. Regions still longer
+    than max_size are cut on blank lines, then on line ends. A file that
+    does not parse is only split by size.
+
+    Args:
+        path: Path of the file, stored in each chunk.
+        content: Content of the file.
+        max_size: Maximum length of a chunk, in characters.
+
+    Returns:
+        The non-blank chunks of the file, in order.
+    """
 
     line_starts = [0]
 
@@ -116,7 +162,22 @@ def chunk_python(path: str, content: str, max_size: int) -> list[MinimalSource]:
     return chunks
 
 
-def chunk_markdown(path: str, content: str, max_size: int) -> list[MinimalSource]:
+def chunk_markdown(path: str, content: str,
+                   max_size: int) -> list[MinimalSource]:
+    """Split a Markdown file into one chunk per section.
+
+    A section runs from a heading to the next one; "#" lines inside
+    fenced code blocks are not headings. Sections longer than max_size
+    are cut between paragraphs, then on line ends.
+
+    Args:
+        path: Path of the file, stored in each chunk.
+        content: Content of the file.
+        max_size: Maximum length of a chunk, in characters.
+
+    Returns:
+        The non-blank chunks of the file, in order.
+    """
 
     starts = [0]
     in_fence = False
@@ -171,7 +232,25 @@ def chunk_markdown(path: str, content: str, max_size: int) -> list[MinimalSource
     return chunks
 
 
-def chunk_corpus(raw_dir: str, max_chunk_size: int = 2000) -> list[MinimalSource]:
+def chunk_corpus(raw_dir: str,
+                 max_chunk_size: int = 2000) -> list[MinimalSource]:
+    """Chunk every indexable file of the corpus.
+
+    Each file is read and split with the strategy of its kind: Python
+    code or Markdown/text. Empty or unreadable files are skipped.
+
+    Args:
+        raw_dir: Root directory of the corpus.
+        max_chunk_size: Maximum length of a chunk, from 1 to 2000.
+
+    Returns:
+        All the chunks, grouped by file in sorted order.
+
+    Raises:
+        ValueError: If max_chunk_size is out of range or no indexable
+            file is found.
+        FileNotFoundError: If raw_dir is not a directory.
+    """
 
     if not 1 <= max_chunk_size <= 2000:
         raise ValueError("max_chunk_size must be between 1 and 2000")
