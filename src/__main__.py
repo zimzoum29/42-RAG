@@ -235,6 +235,34 @@ class RagCLI:
             return
         print("  ".join(f"Recall@{k}: {value:.3f}" for k, value in recalls.items()))
 
+    def serve(self, host: str = "127.0.0.1", port: int = 8000,
+              index_dir: str = "data/processed") -> None:
+        """Serve /search and /answer over a local HTTP API.
+
+        Args:
+            host: Address to listen on; 127.0.0.1 keeps it local.
+            port: Port to listen on.
+            index_dir: Directory of the index.
+        """
+        if isinstance(port, bool) or not isinstance(port, int) \
+                or not 1 <= port <= 65535:
+            print(f"Error: port must be an integer from 1 to 65535, "
+                  f"got {port!r}")
+            return
+        try:
+            import uvicorn
+
+            from .api import create_app
+            app = create_app(str(index_dir))
+        except FileNotFoundError:
+            print(f"Error: no index found in {index_dir}/, "
+                  "run the index command first")
+            return
+        except (ImportError, OSError, ValueError) as error:
+            print(f"Error: {describe(error)}")
+            return
+        print(f"Serving on http://{host}:{port} (docs: /docs)")
+        uvicorn.run(app, host=str(host), port=port)
 
 
 if __name__ == "__main__":
