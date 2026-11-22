@@ -3,7 +3,7 @@ import pickle
 from array import array
 from pathlib import Path
 from typing import TypedDict
-from indexing import BM25Index
+from .indexing import BM25Index
 from .models import MinimalSource
 
 INDEX_FILES = ("chunks.json", "bm25_index.json")
@@ -76,6 +76,15 @@ def compact_postings(postings: dict[str, list[list[int]]]) -> Postings:
 
 def read_json_index(directory: Path
                     ) -> tuple[list[MinimalSource], CompactIndex]:
+    """Read the index from its JSON files.
+
+    Args:
+        directory: Directory of the index.
+
+    Returns:
+        The chunks and the BM25 index, with compact posting lists.
+    """
+    
     with open(directory / "chunks.json", encoding="utf-8") as f:
         chunks = [MinimalSource.model_validate(c) for c in json.load(f)]
     with open(directory / "bm25_index.json", encoding="utf-8") as f:
@@ -221,7 +230,7 @@ class QueryCache:
         Raises:
             OSError: If the cache file cannot be written.
         """
-        
+
         if not self.changed:
             return
         with open(self.path, "w", encoding="utf-8") as f:

@@ -252,8 +252,8 @@ def chunk_corpus(raw_dir: str,
         FileNotFoundError: If raw_dir is not a directory.
     """
 
-    if not 1 <= max_chunk_size <= 2000:
-        raise ValueError("max_chunk_size must be between 1 and 2000")
+    if not 100 <= max_chunk_size <= 2000:
+        raise ValueError("max_chunk_size must be between 100 and 2000")
 
     files = collect_files(raw_dir)
 

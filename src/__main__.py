@@ -1,7 +1,5 @@
-from pathlib import Path
-
 import fire
-
+from pydantic import ValidationError
 from .evaluation import recall_at_k
 from .generation import Generator, answer_dataset
 from .indexing import build_index
@@ -29,6 +27,28 @@ def check_k(k: object) -> int:
         raise ValueError(f"k must be a positive integer, got {k!r}")
     return k
 
+def describe(error: Exception) -> str:
+    """Turn an exception into a short, one-line error message.
+
+    Pydantic validation errors are reduced to their first problem and
+    where it is in the file, instead of the full multi-line report.
+
+    Args:
+        error: Exception to describe.
+
+    Returns:
+        A one-line description of the error.
+    """
+
+    if isinstance(error, ValidationError):
+        first = error.errors()[0]
+        where = ".".join(str(part) for part in first["loc"])
+        message = first["msg"]
+        if where:
+            message += f" (at {where})"
+        return message
+    return str(error)
+
 
 class RagCLI:
     """Command-line interface of the RAG system, exposed with Fire.
@@ -36,6 +56,7 @@ class RagCLI:
     Each public method is a command, and each of its parameters an
     option: uv run python -m src <command> [--option value].
     """
+
 
     def index(self, max_chunk_size: int = 2000, raw_dir: str = "data/raw",
               out_dir: str = "data/processed") -> None:
@@ -52,7 +73,7 @@ class RagCLI:
                 raise ValueError(f"max_chunk_size must be an integer, got {max_chunk_size!r}")
             n_chunks = build_index(raw_dir, out_dir, max_chunk_size)
         except (OSError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         print(f"Ingestion complete! Indexed {n_chunks} chunks under {out_dir}/")
 
@@ -81,7 +102,7 @@ class RagCLI:
                   "run the index command first")
             return
         except (OSError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         if retriever.cache_hits:
             print("(results served from cache)")
@@ -114,7 +135,7 @@ class RagCLI:
             print(f"Error: no index found in {index_dir}/, run the index command first")
             return
         except (OSError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         try:
             out_path = search_dataset(retriever, str(dataset_path), k, str(save_directory))
@@ -122,7 +143,7 @@ class RagCLI:
             print(f"Error: dataset not found: {dataset_path}")
             return
         except (OSError, ValueError) as error:
-            print(f"Error: invalid dataset {dataset_path}: {error}")
+            print(f"Error: invalid dataset {dataset_path}: {describe(error)}")
             return
         print(f"Saved student_search_results to {out_path}")
 
@@ -146,12 +167,12 @@ class RagCLI:
             print(f"Error: no index found in {index_dir}/, run the index command first")
             return
         except (OSError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         try:
             answer = Generator().answer(query, sources)
         except (ImportError, OSError, RuntimeError, ValueError) as error:
-            print(f"Error: answer generation failed: {error}")
+            print(f"Error: answer generation failed: {describe(error)}")
             return
         print(answer)
         print("\nSources:")
@@ -173,14 +194,22 @@ class RagCLI:
                 StudentSearchResultsAndAnswer file.
         """
 
-        if not Path(str(student_search_results_path)).is_file():
-            print(f"Error: file not found: {student_search_results_path}")
+        path = str(student_search_results_path)
+        try:
+            with open(path, encoding="utf-8") as f:
+                StudentSearchResults.model_validate_json(f.read())
+        except FileNotFoundError:
+            print(f"Error: file not found: {path}")
+            return
+        except (OSError, ValueError) as error:
+            print(f"Error: invalid search results {path}: "
+                  f"{describe(error)}")
             return
         try:
             generator = Generator()
-            out_path = answer_dataset(generator, str(student_search_results_path), str(save_directory))
+            out_path = answer_dataset(generator, path, str(save_directory))
         except (ImportError, OSError, RuntimeError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         print(f"Saved student_search_results_and_answer to {out_path}")
 
@@ -194,7 +223,7 @@ class RagCLI:
             dataset_path: Path of the dataset with the reference
                 sources (AnsweredQuestions).
         """
-        
+
         try:
             with open(student_search_results_path, encoding="utf-8") as f:
                 results = StudentSearchResults.model_validate_json(f.read())
@@ -202,9 +231,10 @@ class RagCLI:
                 dataset = RagDataset.model_validate_json(f.read())
             recalls = recall_at_k(results, dataset, [1, 3, 5, 10])
         except (OSError, ValueError) as error:
-            print(f"Error: {error}")
+            print(f"Error: {describe(error)}")
             return
         print("  ".join(f"Recall@{k}: {value:.3f}" for k, value in recalls.items()))
+
 
 
 if __name__ == "__main__":
