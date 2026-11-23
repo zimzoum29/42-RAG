@@ -59,7 +59,7 @@ def index_fingerprint(directory: Path) -> str:
 def compact_postings(postings: dict[str, list[list[int]]]) -> Postings:
     """Store each posting list as two int arrays.
 
-    One array holds the chunk ids and the other the term frequencies.
+    One array holds the chunk ids andthe other the term frequencies.
     A few arrays per token load much faster than millions of small
     Python lists.
 
@@ -84,7 +84,7 @@ def read_json_index(directory: Path
     Returns:
         The chunks and the BM25 index, with compact posting lists.
     """
-    
+
     with open(directory / "chunks.json", encoding="utf-8") as f:
         chunks = [MinimalSource.model_validate(c) for c in json.load(f)]
     with open(directory / "bm25_index.json", encoding="utf-8") as f:
@@ -181,47 +181,51 @@ class QueryCache:
             pass
 
     @staticmethod
-    def key(question: str, k: int) -> str:
+    def key(question: str, k: int, method: str) -> str:
         """Build the cache key of a query.
 
         Args:
             question: Text of the question.
             k: Number of results requested.
+            method: Retrieval method used.
 
         Returns:
-            A key made of k and the stripped question.
+            A key made of the method, k and the stripped question.
         """
 
-        return f"{k}\t{question.strip()}"
+        return f"{method}\t{k}\t{question.strip()}"
 
-    def get(self, question: str, k: int) -> list[MinimalSource] | None:
+    def get(self, question: str, k: int,
+            method: str) -> list[MinimalSource] | None:
         """Return the cached results of a query.
 
         Args:
             question: Text of the question.
             k: Number of results requested.
+            method: Retrieval method used.
 
         Returns:
             The cached sources, or None if the query is not cached.
         """
 
-        entry = self.entries.get(self.key(question, k))
+        entry = self.entries.get(self.key(question, k, method))
         if entry is None:
             return None
         return [MinimalSource.model_validate(s) for s in entry]
 
-    def put(self, question: str, k: int,
+    def put(self, question: str, k: int, method: str,
             sources: list[MinimalSource]) -> None:
         """Store the results of a query in memory.
 
         Args:
             question: Text of the question.
             k: Number of results requested.
+            method: Retrieval method used.
             sources: Sources found for the question.
         """
 
-        self.entries[self.key(question, k)] = [s.model_dump()
-                                               for s in sources]
+        self.entries[self.key(question, k, method)] = [s.model_dump()
+                                                       for s in sources]
         self.changed = True
 
     def save(self) -> None:

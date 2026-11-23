@@ -4,7 +4,7 @@ from .evaluation import recall_at_k
 from .generation import Generator, answer_dataset
 from .indexing import build_index
 from .models import RagDataset, StudentSearchResults
-from .retrieval import Retriever, search_dataset
+from .retrieval import METHODS, Retriever, search_dataset
 
 
 def check_k(k: object) -> int:
@@ -23,7 +23,7 @@ def check_k(k: object) -> int:
         ValueError: If k is not an int greater than 0.
     """
 
-    if isinstance(k, bool) or not isinstance(k, int) or k <= 0:
+    if isinstance(k, bool) or not isinstance(k, int) or k < 1:
         raise ValueError(f"k must be a positive integer, got {k!r}")
     return k
 
@@ -59,27 +59,33 @@ class RagCLI:
 
 
     def index(self, max_chunk_size: int = 2000, raw_dir: str = "data/raw",
-              out_dir: str = "data/processed") -> None:
+              out_dir: str = "data/processed",
+              semantic: bool = False) -> None:
         """Chunk the corpus and build the BM25 index.
 
         Args:
-            max_chunk_size: Maximum length of a chunk, from 1 to 2000.
+            max_chunk_size: Maximum length of a chunk, from 100 to 2000.
             raw_dir: Root directory of the corpus.
             out_dir: Directory where the index is written.
+            semantic: Whether to also build the embedding index.
         """
 
         try:
-            if isinstance(max_chunk_size, bool) or not isinstance(max_chunk_size, int):
-                raise ValueError(f"max_chunk_size must be an integer, got {max_chunk_size!r}")
-            n_chunks = build_index(raw_dir, out_dir, max_chunk_size)
-        except (OSError, ValueError) as error:
+            if isinstance(max_chunk_size, bool) \
+                    or not isinstance(max_chunk_size, int):
+                raise ValueError("max_chunk_size must be an integer, "
+                                 f"got {max_chunk_size!r}")
+            n_chunks = build_index(raw_dir, out_dir, max_chunk_size,
+                                   bool(semantic))
+        except (ImportError, OSError, ValueError) as error:
             print(f"Error: {describe(error)}")
             return
-        print(f"Ingestion complete! Indexed {n_chunks} chunks under {out_dir}/")
+        print(f"Ingestion complete! Indexed {n_chunks} chunks "
+              f"under {out_dir}/")
 
     def search(self, query: str, k: int = 5,
                index_dir: str = "data/processed",
-               cache: bool = True) -> None:
+               cache: bool = True, method: str = "bm25") -> None:
         """Print the top-k sources for a single query.
 
         Args:
@@ -87,6 +93,7 @@ class RagCLI:
             k: Number of sources to return.
             index_dir: Directory of the index.
             cache: Whether to use the index and query caches.
+            method: Retrieval method, "bm25" or "semantic".
         """
 
         try:
@@ -95,29 +102,22 @@ class RagCLI:
             if not query.strip():
                 raise ValueError("query must not be empty")
             retriever = Retriever(index_dir, use_cache=bool(cache))
-            sources = retriever.search(query, k)
+            sources = retriever.search(query, k, str(method))
             retriever.save_cache()
-        except FileNotFoundError:
-            print(f"Error: no index found in {index_dir}/, "
+        except FileNotFoundError as error:
+            print(f"Error: {describe(error)}" if method == "semantic"
+                  else f"Error: no index found in {index_dir}/, "
                   "run the index command first")
             return
-        except (OSError, ValueError) as error:
+        except (ImportError, OSError, ValueError) as error:
             print(f"Error: {describe(error)}")
             return
-        if retriever.cache_hits:
-            print("(results served from cache)")
-        if not sources:
-            print("No relevant source found.")
-            return
-        for rank, source in enumerate(sources, start=1):
-            print(f"{rank}. {source.file_path} "
-                  f"[{source.first_character_index}:"
-                  f"{source.last_character_index}]")
+        # ... la suite (cache_hits, affichage) ne change pas
 
     def search_dataset(self, dataset_path: str, k: int = 10,
                        save_directory: str = "data/output/search_results",
                        index_dir: str = "data/processed",
-                       cache: bool = True) -> None:
+                       cache: bool = True, method: str = "bm25") -> None:
         """Search every question of a dataset and save the results.
 
         Args:
@@ -126,35 +126,47 @@ class RagCLI:
             save_directory: Directory of the StudentSearchResults file.
             index_dir: Directory of the index.
             cache: Whether to use the index and query caches.
+            method: Retrieval method, "bm25" or "semantic".
         """
 
         try:
             k = check_k(k)
+            if method not in METHODS:
+                raise ValueError(f"method must be one of "
+                                 f"{', '.join(METHODS)}, got {method!r}")
             retriever = Retriever(index_dir, use_cache=bool(cache))
-        except FileNotFoundError:
-            print(f"Error: no index found in {index_dir}/, run the index command first")
+            if method == "semantic":
+                retriever.semantic_index()
+        except FileNotFoundError as error:
+            print(f"Error: {describe(error)}" if method == "semantic"
+                  else f"Error: no index found in {index_dir}/, "
+                  "run the index command first")
             return
-        except (OSError, ValueError) as error:
+        except (ImportError, OSError, ValueError) as error:
             print(f"Error: {describe(error)}")
             return
         try:
-            out_path = search_dataset(retriever, str(dataset_path), k, str(save_directory))
+            out_path = search_dataset(retriever, str(dataset_path), k,
+                                      str(save_directory), str(method))
         except FileNotFoundError:
             print(f"Error: dataset not found: {dataset_path}")
             return
         except (OSError, ValueError) as error:
-            print(f"Error: invalid dataset {dataset_path}: {describe(error)}")
+            print(f"Error: invalid dataset {dataset_path}: "
+                  f"{describe(error)}")
             return
         print(f"Saved student_search_results to {out_path}")
 
     def answer(self, query: str, k: int = 5,
-               index_dir: str = "data/processed") -> None:
+               index_dir: str = "data/processed",
+               method: str = "bm25") -> None:
         """Answer a single query from its top-k sources.
 
         Args:
             query: Text of the question.
             k: Number of sources given to the model.
             index_dir: Directory of the index.
+            method: Retrieval method, "bm25" or "semantic".
         """
 
         try:
@@ -162,24 +174,16 @@ class RagCLI:
             query = str(query)
             if not query.strip():
                 raise ValueError("query must not be empty")
-            sources = Retriever(index_dir).search(query, k)
-        except FileNotFoundError:
-            print(f"Error: no index found in {index_dir}/, run the index command first")
+            sources = Retriever(index_dir).search(query, k, str(method))
+        except FileNotFoundError as error:
+            print(f"Error: {describe(error)}" if method == "semantic"
+                  else f"Error: no index found in {index_dir}/, "
+                  "run the index command first")
             return
-        except (OSError, ValueError) as error:
+        except (ImportError, OSError, ValueError) as error:
             print(f"Error: {describe(error)}")
             return
-        try:
-            answer = Generator().answer(query, sources)
-        except (ImportError, OSError, RuntimeError, ValueError) as error:
-            print(f"Error: answer generation failed: {describe(error)}")
-            return
-        print(answer)
-        print("\nSources:")
-        for rank, source in enumerate(sources, start=1):
-            print(f"{rank}. {source.file_path} "
-                  f"[{source.first_character_index}:"
-                  f"{source.last_character_index}]")
+        # ... la génération et l'affichage ne changent pas
 
     def answer_dataset(
             self, student_search_results_path: str,

@@ -132,16 +132,19 @@ def save_index(out_dir: str, chunks: list[MinimalSource],
 
 
 def build_index(raw_dir: str = "data/raw", out_dir: str = "data/processed",
-                max_chunk_size: int = 2000) -> int:
+                max_chunk_size: int = 2000, semantic: bool = False) -> int:
     """Chunk the corpus, build the BM25 index and save it in out_dir.
 
     The text of each chunk is read back from its file and tokenized,
     together with the file path, before computing the BM25 statistics.
+    With semantic, the chunk embeddings are also computed; otherwise any
+    old embeddings are removed, since they no longer match the chunks.
 
     Args:
         raw_dir: Root directory of the corpus.
         out_dir: Directory where the index is written.
-        max_chunk_size: Maximum length of a chunk, from 1 to 2000.
+        max_chunk_size: Maximum length of a chunk, from 100 to 2000.
+        semantic: Whether to also build the embedding index.
 
     Returns:
         Number of chunks indexed.
@@ -150,6 +153,7 @@ def build_index(raw_dir: str = "data/raw", out_dir: str = "data/processed",
         ValueError: If max_chunk_size is out of range or no indexable
             file is found.
         FileNotFoundError: If raw_dir is not a directory.
+        ImportError: If semantic is set without sentence-transformers.
     """
 
     chunks = chunk_corpus(raw_dir, max_chunk_size)
@@ -164,4 +168,9 @@ def build_index(raw_dir: str = "data/raw", out_dir: str = "data/processed",
         tokenized.append(tokenize(text) + tokenize(chunk.file_path))
     index = build_bm25(tokenized)
     save_index(out_dir, chunks, index)
+    if semantic:
+        from .semantic import build_embeddings
+        build_embeddings(chunks, out_dir)
+    else:
+        (Path(out_dir) / "embeddings.npy").unlink(missing_ok=True)
     return len(chunks)
